@@ -9,6 +9,11 @@ public class Bunny : MonoBehaviour
     public float speed = 1f;
     public float visionRange = 5f;
 
+    // FEATURE Eventos climáticos: visión real según el clima (ver WeatherSystem).
+    [Header("Weather (Clima)")]
+    [Tooltip("Vision real actual segun el clima (solo lectura, para ver el efecto en el Inspector).")]
+    public float currentVision;
+
     [Header("Bunny States")]
     public bool isAlive = true;
     public BunnyState currentState = BunnyState.Exploring;
@@ -214,10 +219,21 @@ public class Bunny : MonoBehaviour
         }
     }
 
+    // FEATURE Eventos climáticos:
+    // Devuelve el rango de visión real = visión base x multiplicador del clima.
+    // Despejado = x1, Lluvia = x0.6, Tormenta = x0.3 (configurable en WeatherSystem).
+    // Si no existe WeatherSystem, el multiplicador es 1 y todo funciona como antes.
+    float GetEffectiveVision()
+    {
+        currentVision = visionRange * WeatherSystem.VisionMultiplier;
+        return currentVision;
+    }
+
     private void OnDrawGizmosSelected()
     {
+        // FEATURE Eventos climáticos: el círculo verde muestra la visión real (afectada por el clima)
         Gizmos.color = Color.green;
-        Gizmos.DrawWireSphere(transform.position, visionRange);
+        Gizmos.DrawWireSphere(transform.position, Application.isPlaying ? GetEffectiveVision() : visionRange);
 
         Gizmos.color = Color.red;
         Gizmos.DrawSphere(destination, 0.2f);
@@ -228,13 +244,15 @@ public class Bunny : MonoBehaviour
 
     bool PredatorInRange()
     {
-        Collider2D predator = Physics2D.OverlapCircle(transform.position, visionRange, LayerMask.GetMask("Foxes"));
+        // FEATURE Eventos climáticos: detecta depredadores solo dentro de la visión afectada por el clima
+        Collider2D predator = Physics2D.OverlapCircle(transform.position, GetEffectiveVision(), LayerMask.GetMask("Foxes"));
         return predator != null;
     }
 
     Vector3 GetNearestPredatorPosition()
     {
-        Collider2D[] predators = Physics2D.OverlapCircleAll(transform.position, visionRange, LayerMask.GetMask("Foxes"));
+        // FEATURE Eventos climáticos: visión afectada por el clima
+        Collider2D[] predators = Physics2D.OverlapCircleAll(transform.position, GetEffectiveVision(), LayerMask.GetMask("Foxes"));
         float minDist = Mathf.Infinity;
         Vector3 pos = transform.position;
 
@@ -253,7 +271,8 @@ public class Bunny : MonoBehaviour
 
     Food FindNearestFood()
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, visionRange, LayerMask.GetMask("Food"));
+        // FEATURE Eventos climáticos: busca comida solo dentro de la visión afectada por el clima
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, GetEffectiveVision(), LayerMask.GetMask("Food"));
         Debug.Log($"Bunny {name} encontró {hits.Length} colliders en su rango");
         Food nearest = null;
         float minDist = Mathf.Infinity;

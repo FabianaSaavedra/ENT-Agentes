@@ -21,6 +21,11 @@ public class Predator : MonoBehaviour
     [Tooltip("Velocidad real actual (solo lectura, para ver el efecto en el Inspector).")]
     public float currentSpeed;
 
+    // FEATURE Eventos climáticos: visión real según el clima (ver WeatherSystem).
+    [Header("Weather (Clima)")]
+    [Tooltip("Vision real actual segun el clima (solo lectura, para ver el efecto en el Inspector).")]
+    public float currentVision;
+
     [Header("Predator States")]
     public bool isAlive = true;
     public PredatorState currentState = PredatorState.Exploring;
@@ -172,10 +177,21 @@ public class Predator : MonoBehaviour
         }
     }
 
+    // FEATURE Eventos climáticos:
+    // Devuelve el rango de visión real = visión base x multiplicador del clima.
+    // Despejado = x1, Lluvia = x0.6, Tormenta = x0.3 (configurable en WeatherSystem).
+    // Si no existe WeatherSystem, el multiplicador es 1 y todo funciona como antes.
+    float GetEffectiveVision()
+    {
+        currentVision = visionRange * WeatherSystem.VisionMultiplier;
+        return currentVision;
+    }
+
     private void OnDrawGizmosSelected()
     {
+        // FEATURE Eventos climáticos: el círculo verde muestra la visión real (afectada por el clima)
         Gizmos.color = Color.green;
-        Gizmos.DrawWireSphere(transform.position, visionRange);
+        Gizmos.DrawWireSphere(transform.position, Application.isPlaying ? GetEffectiveVision() : visionRange);
 
         Gizmos.color = Color.red;
         Gizmos.DrawSphere(destination, 0.2f);
@@ -186,7 +202,8 @@ public class Predator : MonoBehaviour
 
     Bunny FindNearestBunny()
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, visionRange, LayerMask.GetMask("Bunnies"));
+        // FEATURE Eventos climáticos: busca conejos solo dentro de la visión afectada por el clima
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, GetEffectiveVision(), LayerMask.GetMask("Bunnies"));
         Debug.Log($"Predator {name} encontró {hits.Length} colliders en su rango");
         Bunny nearest = null;
         float minDist = Mathf.Infinity;
