@@ -9,6 +9,18 @@ public class Predator : MonoBehaviour
     public float speed = 1f;
     public float visionRange = 5f;
 
+    // FEATURE: Envejecimiento de depredadores.
+    // El depredador pierde velocidad a medida que envejece (ver AgingCalculator).
+    [Header("Aging (Envejecimiento)")]
+    [Tooltip("Porcentaje de la vida (0 a 1) en el que empieza a perder velocidad. 0.5 = a mitad de su vida.")]
+    [Range(0f, 1f)] public float maturityRatio = 0.5f;
+
+    [Tooltip("Porcentaje minimo de velocidad que conserva al llegar a su edad maxima. 0.3 = 30%.")]
+    [Range(0.05f, 1f)] public float minSpeedFactor = 0.3f;
+
+    [Tooltip("Velocidad real actual (solo lectura, para ver el efecto en el Inspector).")]
+    public float currentSpeed;
+
     [Header("Predator States")]
     public bool isAlive = true;
     public PredatorState currentState = PredatorState.Exploring;
@@ -130,13 +142,20 @@ public class Predator : MonoBehaviour
 
     void Move()
     {
+        // FEATURE Envejecimiento: la velocidad real depende de la edad.
+        // AgingCalculator devuelve un factor entre minSpeedFactor y 1
+        // que se multiplica por la velocidad base.
+        currentSpeed = speed * AgingCalculator.GetSpeedFactor(age, maxAge, maturityRatio, minSpeedFactor);
+
         transform.position = Vector3.MoveTowards(
             transform.position,
             destination,
-            speed * h
+            currentSpeed * h
         );
 
-        energy -= speed * h;
+        // El gasto de energía usa la velocidad real:
+        // un depredador viejo y lento gasta menos energía al moverse.
+        energy -= currentSpeed * h;
     }
 
     void Age()
