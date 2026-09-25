@@ -44,7 +44,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7aee03c263c25634e92990da1907b9be, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SimulationManager
-  secondsPerIteration: 0.01
+  secondsPerIteration: 0.1
   bunnies: []
   predators: []
-  foodSpawner: {fileID: 0}
+  spawner: {fileID: 7423225132313568019, guid: 8de4af53ceff1834790bd88384ae3fdb, type: 3}

@@ -9,7 +9,7 @@ public class SimulationManager : MonoBehaviour
 
     public List<Bunny> bunnies = new List<Bunny>();
     public List<Predator> predators = new List<Predator>();
-    public FoodSpawner foodSpawner;
+    public FoodSpawner spawner;
 
     void Start()
     {
@@ -18,14 +18,11 @@ public class SimulationManager : MonoBehaviour
 
         Predator[] foundPredators = FindObjectsByType<Predator>(FindObjectsSortMode.InstanceID);
         predators = new List<Predator>(foundPredators);
-
-        foodSpawner = FindFirstObjectByType<FoodSpawner>();
     }
 
     void Update()
     {
         time += Time.deltaTime;
-
         if (time >= secondsPerIteration )
         {
             time = 0f;
@@ -35,6 +32,8 @@ public class SimulationManager : MonoBehaviour
 
     void Simulate()
     {
+        if (spawner != null) spawner.Simulate(secondsPerIteration);
+
         foreach (Bunny b in bunnies)
         {
             if (b != null && b.isAlive)
@@ -50,7 +49,5 @@ public class SimulationManager : MonoBehaviour
                p .Simulate(secondsPerIteration);
             }
         }
-
-        if (foodSpawner != null) foodSpawner.Simulate(secondsPerIteration);
     }
 }

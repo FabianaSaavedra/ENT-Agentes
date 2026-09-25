@@ -1,15 +1,21 @@
-using UnityEngine;
+Ôªøusing UnityEngine;
 
 public class Bunny : MonoBehaviour
 {
     [Header("Bunny Settings")]
-    public float energy = 10;
-    public float age = 0;
-    public float maxAge = 20;
+    public float energy = 10f;
+    public float age = 0f;
+    public float maxAge = 20f;
     public float speed = 1f;
     public float visionRange = 5f;
+    public float baseSpeed;
 
-    // FEATURE Eventos clim·ticos: visiÛn real seg˙n el clima (ver WeatherSystem).
+
+    [Header("Sleeping Settings")]
+    public float sleepRecoveryRate = 5f;   // energ√≠a por segundo
+    public float sleepRecoveryAmount = 20f; // cu√°nto recupera al dormir
+
+    // FEATURE Eventos climaticos: vision real segun el clima (ver WeatherSystem).
     [Header("Weather (Clima)")]
     [Tooltip("Vision real actual segun el clima (solo lectura, para ver el efecto en el Inspector).")]
     public float currentVision;
@@ -18,12 +24,29 @@ public class Bunny : MonoBehaviour
     public bool isAlive = true;
     public BunnyState currentState = BunnyState.Exploring;
 
+    [Header("Mutation")]
+    public GameObject bunnyPrefab;
+
     private Vector3 destination;
     private float h;
+
+    private float sleepTargetEnergy;
 
     private void Start()
     {
         destination = transform.position;
+
+        //PRUEBA TEMPORAL
+        // Bunny[] bunnies = FindObjectsByType<Bunny>(FindObjectsSortMode.None);
+
+        //foreach (var b in bunnies)
+        //{
+        //    if (b != this)
+        //    {
+        //        CreateChildWith(b);
+        //        break;
+        //    }
+        //}
     }
 
     public void Simulate(float h)
@@ -39,14 +62,21 @@ public class Bunny : MonoBehaviour
             case BunnyState.Exploring:
                 Explore();
                 break;
+
             case BunnyState.SearchingFood:
                 SearchFood();
                 break;
+
             case BunnyState.Eating:
                 Eat();
                 break;
+
             case BunnyState.Fleeing:
                 Flee();
+                break;
+
+            case BunnyState.Sleeping:
+                Sleep();
                 break;
         }
 
@@ -57,27 +87,45 @@ public class Bunny : MonoBehaviour
 
     void EvaluateState()
     {
-        // 1. Si hay un depredador cerca -> huir
+        // üîµ PRIORIDAD: dormir
+        if (energy <= 0f)
+        {
+            if (currentState != BunnyState.Sleeping)
+            {
+                currentState = BunnyState.Sleeping;
+                sleepTargetEnergy = Mathf.Min(sleepRecoveryAmount);
+            }
+            return;
+        }
+
+        if (currentState == BunnyState.Sleeping)
+            return;
+
+        // üî¥ Depredador cerca ‚Üí huir
         if (PredatorInRange())
         {
             currentState = BunnyState.Fleeing;
             return;
         }
 
-        // 2. Si la energÌa est· baja -> buscar comida
-        if (energy < 500f)
+        // üü¢ Buscar comida
+        if (energy < 50f)
         {
             Food nearestFood = FindNearestFood();
             if (nearestFood != null)
             {
                 currentState = BunnyState.SearchingFood;
                 destination = nearestFood.transform.position;
-                return;
             }
         }
 
-        // 3. Si est· encima de la comida -> comer
-        Collider2D foodHit = Physics2D.OverlapCircle(transform.position, 0.2f, LayerMask.GetMask("Food"));
+        // üçΩ Comer si est√° encima
+        Collider2D foodHit = Physics2D.OverlapCircle(
+            transform.position,
+            0.2f,
+            LayerMask.GetMask("Food")
+        );
+
         if (foodHit != null)
         {
             Food food = foodHit.GetComponent<Food>();
@@ -88,8 +136,8 @@ public class Bunny : MonoBehaviour
             }
         }
 
-        // 4. Si no pasa nada -> explorar
-        if (currentState == BunnyState.Eating == false)
+        // üåø Explorar
+        if (currentState != BunnyState.Eating)
         {
             currentState = BunnyState.Exploring;
         }
@@ -97,16 +145,6 @@ public class Bunny : MonoBehaviour
 
     void Explore()
     {
-        // Si hay comida a la vista, cambiar de estado
-        Food nearestFood = FindNearestFood();
-        if (nearestFood != null)
-        {
-            currentState = BunnyState.SearchingFood;
-            destination = nearestFood.transform.position;
-            return;
-        }
-
-        // Si ya llegÛ al destino, elegir uno nuevo
         if (Vector3.Distance(transform.position, destination) < 0.1f)
         {
             SelectNewDestination();
@@ -116,16 +154,46 @@ public class Bunny : MonoBehaviour
     void SearchFood()
     {
         Food nearestFood = FindNearestFood();
+
         if (nearestFood == null)
         {
-            // Si no hay comida, volver a explorar
             currentState = BunnyState.Exploring;
+            SelectNewDestination();
             return;
         }
 
+        Vector2 origin = transform.position;
+        Vector2 target = nearestFood.transform.position;
+        Vector2 dir = target - origin;
+        float dist = dir.magnitude;
+
+        if (dist <= 0.001f)
+        {
+            currentState = BunnyState.Eating;
+            return;
+        }
+
+        Vector2 dirNorm = dir / dist;
+
+        // üî¥ BLOQUEO: Obst√°culos o agua
+        RaycastHit2D blockHit = Physics2D.Raycast(
+            origin,
+            dirNorm,
+            dist,
+            LayerMask.GetMask("Obstacles", "Water")
+        );
+
+        if (blockHit.collider != null)
+        {
+            // ‚ùå ignora esa comida
+            currentState = BunnyState.Exploring;
+            SelectNewDestination();
+            return;
+        }
+
+        // ‚úÖ camino libre
         destination = nearestFood.transform.position;
 
-        // Si est· suficientemente cerca, pasar a comer
         if (Vector3.Distance(transform.position, nearestFood.transform.position) < 0.2f)
         {
             currentState = BunnyState.Eating;
@@ -134,40 +202,62 @@ public class Bunny : MonoBehaviour
 
     void Eat()
     {
-        Collider2D foodHit = Physics2D.OverlapCircle(transform.position, 0.2f, LayerMask.GetMask("Food"));
+        Collider2D foodHit = Physics2D.OverlapCircle(
+            transform.position,
+            0.2f,
+            LayerMask.GetMask("Food")
+        );
+
         if (foodHit != null)
         {
             Food food = foodHit.GetComponent<Food>();
             if (food != null)
             {
                 energy += food.nutrition;
+                energy = Mathf.Min(energy);
                 Destroy(food.gameObject);
             }
         }
 
-        // DespuÈs de comer vuelve a explorar
         currentState = BunnyState.Exploring;
+        SelectNewDestination();
     }
 
     void Flee()
     {
-        // Elegir direcciÛn contraria al depredador
-        Vector3 fleeDir = (transform.position - GetNearestPredatorPosition()).normalized;
-        destination = transform.position + fleeDir * visionRange;
+        Vector3 predatorPos = GetNearestPredatorPosition();
+        Vector3 fleeDir = (transform.position - predatorPos).normalized;
 
-        // DespuÈs de huir vuelve a explorar
-        currentState = BunnyState.Exploring;
-
-        RaycastHit2D hit = Physics2D.Raycast(transform.position, fleeDir, visionRange, LayerMask.GetMask("Obstacles"));
+        RaycastHit2D hit = Physics2D.Raycast(
+            transform.position,
+            fleeDir,
+            visionRange,
+            LayerMask.GetMask("Obstacles", "Water")
+        );
 
         if (hit.collider != null)
         {
             float offset = transform.localScale.magnitude * 0.5f;
-            destination = hit.point - (Vector2)fleeDir * offset;
+            destination = (Vector3)hit.point - fleeDir * offset;
         }
         else
         {
             destination = transform.position + fleeDir * visionRange;
+        }
+
+        currentState = BunnyState.Exploring;
+    }
+
+    void Sleep()
+    {
+        // üí§ quieto
+        energy += sleepRecoveryRate * h;
+
+        if (energy >= sleepTargetEnergy)
+        {
+            energy = sleepTargetEnergy;
+            currentState = BunnyState.Exploring;
+            SelectNewDestination();
         }
     }
 
@@ -181,7 +271,12 @@ public class Bunny : MonoBehaviour
 
         Vector3 targetPoint = transform.position + direction;
 
-        RaycastHit2D hit = Physics2D.Raycast(transform.position, direction.normalized, visionRange, LayerMask.GetMask("Obstacles"));
+        RaycastHit2D hit = Physics2D.Raycast(
+            transform.position,
+            direction.normalized,
+            visionRange,
+            LayerMask.GetMask("Obstacles", "Water")
+        );
 
         if (hit.collider != null)
         {
@@ -196,6 +291,9 @@ public class Bunny : MonoBehaviour
 
     void Move()
     {
+        if (currentState == BunnyState.Sleeping)
+            return;
+
         transform.position = Vector3.MoveTowards(
             transform.position,
             destination,
@@ -212,15 +310,15 @@ public class Bunny : MonoBehaviour
 
     void CheckState()
     {
-        if (energy <= 0 || age > maxAge)
+        if (age > maxAge)
         {
             isAlive = false;
             Destroy(gameObject);
         }
     }
 
-    // FEATURE Eventos clim·ticos:
-    // Devuelve el rango de visiÛn real = visiÛn base x multiplicador del clima.
+    // FEATURE Eventos climaticos:
+    // Devuelve el rango de vision real = vision base x multiplicador del clima.
     // Despejado = x1, Lluvia = x0.6, Tormenta = x0.3 (configurable en WeatherSystem).
     // Si no existe WeatherSystem, el multiplicador es 1 y todo funciona como antes.
     float GetEffectiveVision()
@@ -229,9 +327,22 @@ public class Bunny : MonoBehaviour
         return currentVision;
     }
 
+    //Mutacion
+    public void CreateChildWith(Bunny partner)
+    {
+        GameObject childObj = Instantiate(bunnyPrefab, transform.position, Quaternion.identity);
+        Bunny child = childObj.GetComponent<Bunny>();
+
+        BunnyMutation.ApplyMutation(child, this, partner);
+
+        //DEBUG (IMPORTANTE)
+        Debug.Log($"Hijo creado -> Speed: {child.speed}, Energy: {child.energy}, Vision: {child.visionRange}");
+    }
+
+
     private void OnDrawGizmosSelected()
     {
-        // FEATURE Eventos clim·ticos: el cÌrculo verde muestra la visiÛn real (afectada por el clima)
+        // FEATURE Eventos climaticos: el circulo verde muestra la vision real (afectada por el clima)
         Gizmos.color = Color.green;
         Gizmos.DrawWireSphere(transform.position, Application.isPlaying ? GetEffectiveVision() : visionRange);
 
@@ -244,15 +355,24 @@ public class Bunny : MonoBehaviour
 
     bool PredatorInRange()
     {
-        // FEATURE Eventos clim·ticos: detecta depredadores solo dentro de la visiÛn afectada por el clima
-        Collider2D predator = Physics2D.OverlapCircle(transform.position, GetEffectiveVision(), LayerMask.GetMask("Foxes"));
+        // FEATURE Eventos climaticos: detecta depredadores solo dentro de la vision afectada por el clima
+        Collider2D predator = Physics2D.OverlapCircle(
+            transform.position,
+            GetEffectiveVision(),
+            LayerMask.GetMask("Foxes")
+        );
         return predator != null;
     }
 
     Vector3 GetNearestPredatorPosition()
     {
-        // FEATURE Eventos clim·ticos: visiÛn afectada por el clima
-        Collider2D[] predators = Physics2D.OverlapCircleAll(transform.position, GetEffectiveVision(), LayerMask.GetMask("Foxes"));
+        // FEATURE Eventos climaticos: vision afectada por el clima
+        Collider2D[] predators = Physics2D.OverlapCircleAll(
+            transform.position,
+            GetEffectiveVision(),
+            LayerMask.GetMask("Foxes")
+        );
+
         float minDist = Mathf.Infinity;
         Vector3 pos = transform.position;
 
@@ -269,28 +389,39 @@ public class Bunny : MonoBehaviour
         return pos;
     }
 
-    Food FindNearestFood()
+    Food FindNearestFood() // Busca la comida mas cercana dentro del rango de vision, considerando obstaculos
     {
-        // FEATURE Eventos clim·ticos: busca comida solo dentro de la visiÛn afectada por el clima
-        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, GetEffectiveVision(), LayerMask.GetMask("Food"));
-        Debug.Log($"Bunny {name} encontrÛ {hits.Length} colliders en su rango");
-        Food nearest = null;
-        float minDist = Mathf.Infinity;
+        // FEATURE Eventos climaticos: busca comida solo dentro de la vision afectada por el clima
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, GetEffectiveVision(), LayerMask.GetMask("Food"));  // Busca todos los collider dentro del rango de vision
+        Debug.Log($"Bunny {name} encontro {hits.Length} colliders en su rango");
+        Food nearest = null; // Inicializa la variable
+        float minDist = Mathf.Infinity; // Inicializa la distancia minima a infinito
 
-        foreach (Collider2D hit in hits)
+        foreach (Collider2D hit in hits) // Se ejecuta para cada collider encontrado
         {
             Food food = hit.GetComponent<Food>();
-            if (food != null)
+            if (food == null) continue;
+
+            Vector3 direction = food.transform.position - transform.position;
+            float dist = direction.magnitude;
+
+            // üî¥ IGNORA comida si hay Obst√°culo o Agua
+            RaycastHit2D blockHit = Physics2D.Raycast(
+                transform.position,
+                direction.normalized,
+                dist,
+                LayerMask.GetMask("Obstacles", "Water")
+            );
+
+            if (blockHit.collider != null) continue;
+
+            if (dist < minDist)
             {
-                float dist = Vector2.Distance(transform.position, food.transform.position);
-                if (dist < minDist)
-                {
-                    minDist = dist;
-                    nearest = food;
-                }
+                minDist = dist;
+                nearest = food;
             }
         }
+        return nearest; //Retornando la comida mas cercana que el conejo puede ver, si no hay niguno entonces manda un null
 
-        return nearest;
     }
 }
